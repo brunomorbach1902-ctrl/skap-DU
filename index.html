@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Skap & Metas DU</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: 'Segoe UI', Arial, sans-serif;
+    background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    color: #333; padding: 20px 0;
+  }
+  .card {
+    background: #fff; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    width: 100%; max-width: 460px; padding: 30px;
+  }
+  h1 { text-align: center; color: #203a43; font-size: 22px; margin-bottom: 5px; }
+  p.subtitle { text-align: center; color: #777; margin-bottom: 25px; font-size: 14px; }
+  label { display: block; margin-bottom: 6px; font-weight: 600; font-size: 14px; }
+  input {
+    width: 100%; padding: 12px; margin-bottom: 18px;
+    border: 1px solid #ccc; border-radius: 8px; font-size: 15px;
+  }
+  button {
+    width: 100%; padding: 12px; background: #203a43; color: #fff;
+    border: none; border-radius: 8px; font-size: 16px; cursor: pointer;
+    transition: background 0.2s; margin-bottom: 10px;
+  }
+  button:hover { background: #2c5364; }
+  .error { color: #c0392b; font-size: 13px; text-align: center; margin-bottom: 10px; display: none; }
+  .hidden { display: none; }
+  .dashboard-header {
+    background: #203a43; color: #fff; padding: 20px;
+    border-radius: 12px 12px 0 0; margin: -30px -30px 20px -30px;
+  }
+  .dashboard-header h2 { margin: 0 0 5px 0; font-size: 18px; }
+  .dashboard-header span { font-size: 13px; opacity: 0.85; }
+  .info-row {
+    display: flex; justify-content: space-between; padding: 10px 0;
+    border-bottom: 1px solid #eee; font-size: 14px; gap: 10px;
+  }
+  .info-row span:first-child { color:#555; }
+  .info-row span:last-child { text-align: right; font-weight: 600; }
+  .logout-btn { background: #c0392b; } .logout-btn:hover { background: #922b21; }
+  .badge {
+    display: inline-block; background: #eaf3ff; color: #1a5276;
+    padding: 3px 10px; border-radius: 20px; font-size: 12px; margin-top: 5px;
+  }
+  .loading { text-align: center; color: #777; font-size: 14px; }
+
+  .tabs { display: flex; margin: -30px -30px 20px -30px; border-radius: 12px 12px 0 0; overflow: hidden; }
+  .tab-btn {
+    flex: 1; padding: 16px; background: #1a2d35; color: #aab8bd; border: none;
+    font-size: 15px; font-weight: 600; cursor: pointer; margin: 0; border-radius: 0;
+  }
+  .tab-btn.active { background: #203a43; color: #fff; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+  .skap-nivel {
+    text-align: center; background: #eaf3ff; color: #1a5276;
+    padding: 10px; border-radius: 8px; font-weight: 700; margin-top: 15px; font-size: 15px;
+  }
+  .plano-box {
+    background: #f7f9fa; border-left: 3px solid #203a43; padding: 10px 14px;
+    margin-top: 10px; font-size: 13px; border-radius: 0 8px 8px 0; color: #444;
+  }
+  .plano-box strong { display:block; color:#203a43; margin-bottom:4px; font-size:12px; text-transform:uppercase; }
+  .no-data { text-align: center; color: #999; font-size: 14px; padding: 20px 0; }
+  .meta-ok { color: #1a7a3c; }
+  .meta-bad { color: #c0392b; }
+</style>
+</head>
+<body>
+
+<div class="card" id="loginCard">
+  <h1>Skap & Metas DU</h1>
+  <p class="subtitle">Acesse com seu CPF (login e senha)</p>
+  <div class="error" id="errorMsg"></div>
+  <div class="loading" id="loadingMsg">Carregando dados...</div>
+  <div id="loginForm" class="hidden">
+    <label for="cpfInput">CPF (somente números)</label>
+    <input type="text" id="cpfInput" placeholder="Ex: 12345678900" maxlength="14">
+    <label for="senhaInput">Senha</label>
+    <input type="password" id="senhaInput" placeholder="Digite seu CPF novamente">
+    <button onclick="login()">Entrar</button>
+  </div>
+</div>
+
+<div class="card hidden" id="mainCard">
+  <div class="tabs">
+    <button class="tab-btn active" id="tabSkapBtn" onclick="mostrarTab('skap')">SKAPs</button>
+    <button class="tab-btn" id="tabMetasBtn" onclick="mostrarTab('metas')">Metas</button>
+  </div>
+
+  <div class="dashboard-header">
+    <h2 id="headerNome"></h2>
+    <span id="headerCargo"></span><br>
+    <span class="badge" id="headerTempo"></span>
+  </div>
+
+  <!-- ABA SKAP -->
+  <div class="tab-content active" id="tabSkap">
+    <div id="skapConteudo"></div>
+  </div>
+
+  <!-- ABA METAS -->
+  <div class="tab-content" id="tabMetas">
+    <div id="metasConteudo"></div>
+  </div>
+
+  <button class="logout-btn" onclick="logout()">Sair</button>
+</div>
+
+<script>
+let baseSkap = {};
+let baseMetas = [];
+let colaboradorAtual = null;
+
+function limparCpf(cpf){ return (cpf || '').replace(/\D/g, ''); }
+
+function parseCSV(texto){
+  const linhas = texto.trim().split(/\r?\n/);
+  const cabecalho = linhas[0].split(',').map(h => h.trim());
+  const registros = [];
+  for (let i = 1; i < linhas.length; i++) {
+    if (!linhas[i].trim()) continue;
+    const valores = linhas[i].split(',');
+    const obj = {};
+    cabecalho.forEach((chave, idx) => { obj[chave.trim()] = (valores[idx] || '').trim(); });
+    registros.push(obj);
+  }
+  return registros;
+}
+
+function montarBaseSkap(registros){
+  const mapa = {};
+  registros.forEach(r => {
+    if (!r.cpf) return;
+    mapa[limparCpf(r.cpf)] = r;
+  });
+  return mapa;
+}
+
+function carregarDados(){
+  Promise.all([
+    fetch('skap_du.csv').then(r => { if(!r.ok) throw new Error('skap_du.csv não encontrado'); return r.text(); }),
+    fetch('metas_du.csv').then(r => { if(!r.ok) throw new Error('metas_du.csv não encontrado'); return r.text(); })
+  ]).then(([textoSkap, textoMetas]) => {
+    baseSkap = montarBaseSkap(parseCSV(textoSkap));
+    baseMetas = parseCSV(textoMetas);
+    document.getElementById('loadingMsg').classList.add('hidden');
+    document.getElementById('loginForm').classList.remove('hidden');
+  }).catch(err => {
+    document.getElementById('loadingMsg').textContent = 'Erro ao carregar dados: ' + err.message;
+    console.error(err);
+  });
+}
+
+function login(){
+  const cpfDigitado = limparCpf(document.getElementById('cpfInput').value);
+  const senhaDigitada = limparCpf(document.getElementById('senhaInput').value);
+  const errorMsg = document.getElementById('errorMsg');
+
+  if (cpfDigitado !== senhaDigitada) {
+    errorMsg.textContent = "A senha deve ser igual ao CPF.";
+    errorMsg.style.display = 'block';
+    return;
+  }
+
+  const colaborador = baseSkap[cpfDigitado];
+  if (!colaborador) {
+    errorMsg.textContent = "CPF não encontrado. Verifique os números digitados.";
+    errorMsg.style.display = 'block';
+    return;
+  }
+
+  errorMsg.style.display = 'none';
+  colaboradorAtual = colaborador;
+  abrirDashboard();
+}
+
+function abrirDashboard(){
+  document.getElementById('loginCard').classList.add('hidden');
+  document.getElementById('mainCard').classList.remove('hidden');
+
+  document.getElementById('headerNome').textContent = colaboradorAtual.nome;
+  document.getElementById('headerCargo').textContent = colaboradorAtual.cargo;
+  document.getElementById('headerTempo').textContent = colaboradorAtual.tempo_casa;
+
+  mostrarTab('skap');
+  mostrarSkap();
+  mostrarMetas();
+}
+
+function mostrarTab(aba){
+  document.getElementById('tabSkap').classList.toggle('active', aba === 'skap');
+  document.getElementById('tabMetas').classList.toggle('active', aba === 'metas');
+  document.getElementById('tabSkapBtn').classList.toggle('active', aba === 'skap');
+  document.getElementById('tabMetasBtn').classList.toggle('active', aba === 'metas');
+}
+
+function mostrarSkap(){
+  const d = colaboradorAtual;
+  const container = document.getElementById('skapConteudo');
+
+  if (!d || d.habilidades_tecnicas === 'Sem dados') {
+    container.innerHTML = '<p class="no-data">Nenhum dado de SKAP disponível no momento (colaborador recém-chegado).</p>';
+    return;
+  }
+
+  let html = '';
+  html += `<div class="info-row"><span>Habilidades Técnicas</span><span>${d.habilidades_tecnicas}</span></div>`;
+  html += `<div class="info-row"><span>Habilidades Específicas</span><span>${d.habilidades_especificas}</span></div>`;
+  html += `<div class="info-row"><span>Habilidades Empoderamento</span><span>${d.habilidades_empoderamento}</span></div>`;
+  html += `<div class="info-row"><span>Proficiência</span><span>${d.proficiencia}</span></div>`;
+  html += `<div class="skap-nivel">Nível: ${d.niveis}</div>`;
+
+  if (d.plano_tecnica) html += `<div class="plano-box"><strong>Plano de Ação - Técnica</strong>${d.plano_tecnica}</div>`;
+  if (d.plano_especifica) html += `<div class="plano-box"><strong>Plano de Ação - Específica</strong>${d.plano_especifica}</div>`;
+  if (d.plano_empoderamento) html += `<div class="plano-box"><strong>Plano de Ação - Empoderamento</strong>${d.plano_empoderamento}</div>`;
+
+  container.innerHTML = html;
+}
+
+function mostrarMetas(){
+  const container = document.getElementById('metasConteudo');
+  let html = '';
+  baseMetas.forEach(m => {
+    html += `<div class="info-row"><span>${m.indicador}</span><span>Meta: ${m.meta} &nbsp;|&nbsp; Real: ${m.real}</span></div>`;
+  });
+  container.innerHTML = html || '<p class="no-data">Nenhuma meta cadastrada.</p>';
+}
+
+function logout(){
+  document.getElementById('mainCard').classList.add('hidden');
+  document.getElementById('loginCard').classList.remove('hidden');
+  document.getElementById('cpfInput').value = '';
+  document.getElementById('senhaInput').value = '';
+  colaboradorAtual = null;
+}
+
+window.addEventListener('load', () => {
+  carregarDados();
+  document.getElementById('senhaInput').addEventListener('keyup', function(e){
+    if (e.key === 'Enter') login();
+  });
+});
+</script>
+
+</body>
+</html>
